@@ -16,6 +16,24 @@
 #include <vector>
 #include "map.h"
 
+inline double multiv_prob(double sig_x, double sig_y, double x_obs, double y_obs,
+                   double mu_x, double mu_y) {
+  // calculate normalization term
+  double gauss_norm;
+  gauss_norm = 1 / (2 * M_PI * sig_x * sig_y);
+
+  // calculate exponent
+  double exponent;
+  exponent = (pow(x_obs - mu_x, 2) / (2 * pow(sig_x, 2)))
+               + (pow(y_obs - mu_y, 2) / (2 * pow(sig_y, 2)));
+    
+  // calculate weight using normalization terms and exponent
+  double weight;
+  weight = gauss_norm * exp(-exponent);
+    
+  return weight;
+}
+
 // for portability of M_PI (Vis Studio, MinGW, etc.)
 #ifndef M_PI
 const double M_PI = 3.14159265358979323846;
@@ -36,16 +54,6 @@ struct ground_truth {
   double x;     // Global vehicle x position [m]
   double y;     // Global vehicle y position
   double theta; // Global vehicle yaw [rad]
-};
-
-/**
- * Struct representing one landmark observation measurement.
- */
-struct LandmarkObs {
-  
-  int id;     // Id of matching landmark in the map.
-  double x;   // Local (vehicle coords) x position of landmark observation [m]
-  double y;   // Local (vehicle coords) y position of landmark observation [m]
 };
 
 /**
@@ -108,15 +116,15 @@ inline bool read_map_data(std::string filename, Map& map) {
     iss_map >> id_i;
 
     // Declare single_landmark
-    Map::single_landmark_s single_landmark_temp;
-
+    LandmarkObs L;
+    
     // Set values
-    single_landmark_temp.id_i = id_i;
-    single_landmark_temp.x_f  = landmark_x_f;
-    single_landmark_temp.y_f  = landmark_y_f;
+    L.id = id_i;
+    L.x  = landmark_x_f;
+    L.y  = landmark_y_f;
 
     // Add to landmark list of map
-    map.landmark_list.push_back(single_landmark_temp);
+    map.landmark_list.push_back(L);
   }
   return true;
 }

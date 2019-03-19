@@ -30,8 +30,18 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
    * NOTE: Consult particle_filter.h for more information about this method 
    *   (and others in this file).
    */
-  num_particles = 0;  // TODO: Set the number of particles
-
+  num_particles = 100;  // TODO: Set the number of particles
+  for (int i = 0; i < num_particles; i++) {
+    Particle p = Particle();
+    p.id = i;
+    p.x = x;
+    p.y = y;
+    p.theta = theta;
+    p.weight = 1;
+    particles.push_back(p);
+    weights.push_back(p.weight);
+  }
+  is_initialized = true;
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], 
@@ -43,7 +53,19 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
    *  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
    *  http://www.cplusplus.com/reference/random/default_random_engine/
    */
+  std::random_device rd{};
+  std::mt19937 gen{rd()}; // Initialize mersenne twister with a system random number
+  std::normal_distribution<> sig_x{0, std_pos[0]};
+  std::normal_distribution<> sig_y{0, std_pos[1]};
+  std::normal_distribution<> sig_theta{0, std_pos[2]};
 
+  for (size_t i = 0; i < particles.size(); i++) {
+    Particle *p = &particles[i];
+    // std::cout << delta_t * velocity * cos(p->theta) << sig_x(gen) << std::endl;
+    p->x += delta_t * velocity * cos(p->theta) + sig_x(gen);
+    p->y += delta_t * velocity * sin(p->theta) + sig_y(gen);
+    p->theta += delta_t * yaw_rate + sig_theta(gen);
+  }
 }
 
 void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted, 
@@ -75,6 +97,34 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   and the following is a good resource for the actual equation to implement
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
+  for (size_t i = 0; i < particles.size(); i++) {
+    Particle *p = &particles[i];
+    double new_weight = 1;
+    for (size_t j = 0; j < observations.size(); j++) { 
+      LandmarkObs L = observations[j];
+
+      // Convert observation to map coords assuming particle p took the measurement
+      double obs_x = p->x + (cos(p->theta) * L.x) - (sin(p->theta) * L.y);
+      double obs_y = p->y + (sin(p->theta) * L.x) + (cos(p->theta) * L.y);
+
+      // Find nearest neighbor landmark on map
+      double min_dist = sensor_range; // Start at max range
+      LandmarkObs min_landmark = {-1,0,0};
+      for (size_t k = 0; k < map_landmarks.landmark_list.size(); k++) {
+        LandmarkObs mL = map_landmarks.landmark_list[k];
+        double d = dist(obs_x, obs_y, mL.x, map_landmarks.landmark_list[k].y);
+        if (d < min_dist) {
+          min_dist = d;
+          min_landmark = mL;
+        }
+      }
+      
+      // Calculate probability product
+      new_weight *= multiv_prob(std_landmark[0], std_landmark[1], obs_x, obs_y, min_landmark.x, min_landmark.y);
+    }
+    p->weight = new_weight;
+    weights[i] = new_weight;
+  }
 
 }
 
@@ -86,6 +136,14 @@ void ParticleFilter::resample() {
    *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
    */
 
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::discrete_distribution<> d(weights.cbegin(), weights.cend());
+  std::vector<Particle> new_particles;
+  for (int i = 0; i < num_particles; i++) {
+    new_particles.push_back(particles[d(gen)]);
+  }
+  particles = new_particles;
 }
 
 void ParticleFilter::SetAssociations(Particle& particle, 
